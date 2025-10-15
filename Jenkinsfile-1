@@ -33,7 +33,7 @@ pipeline {
     }
 }
 
-// define a function that references
+// define a function that references the SonarQube tool installation
 def getSonarPath(){
     def SonarHome= tool name: 'sonarqube', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
     return SonarHome
