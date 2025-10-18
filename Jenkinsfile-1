@@ -3,14 +3,14 @@ pipeline {
 
     environment {
         VERSION = "1.0.${BUILD_NUMBER}"
-        // Set PATH using helper functions (correct for Classic Stage View)
-        PATH = "${PATH}:${getSonarPath()}:${getDockerPath()}"
+        // FIXED: Removed the getDockerPath() call. Rely only on getSonarPath() and agent's PATH.
+        PATH = "${PATH}:${getSonarPath()}"
         // RDS Endpoint
         DB_INSTANCE_URL = 'wordpressdbclixxjenkins.cd7numzl1xfe.us-east-1.rds.amazonaws.com' 
     }
 
     stages {
-        // --- SONARQUBE STAGES (Java Crash Fix) ---
+        // --- SONARQUBE STAGES (Includes Java 11 Fix) ---
         stage ('Sonarcube Scan') {
             steps {
                 script {
@@ -20,7 +20,7 @@ pipeline {
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]){
                     withSonarQubeEnv('SonarQubeScanner') { 
                         sh """ 
-                        # CRITICAL FIX: EXPORT JAVA_HOME to force use of Java 11 for the scanner
+                        # CRITICAL FIX: EXPORT JAVA_HOME to force use of Java 11
                         export JAVA_HOME='${java11Home}'
                         
                         ${scannerHome}/bin/sonar-scanner \
@@ -28,8 +28,6 @@ pipeline {
                         -Dsonar.sources=./html/html \n \
                         -Dsonar.login=${SONAR_TOKEN}
                         """
-                        // Project Key: CliXX-App-RC
-                        // Source Path: ./html/html (Nested structure fix)
                     }
                 }
             }
@@ -43,10 +41,11 @@ pipeline {
             }
         }
 
-        // --- DOCKER AND DB STAGES (Syntax Corrected) ---
+        // --- DOCKER AND DB STAGES (Now uses system Docker directly) ---
         
         stage ('Build Docker Image') {
             steps {
+                // Docker is run directly via the agent's system PATH
                 sh "docker build ./html/html -t clixx-image:$VERSION " 
             }
         }
@@ -69,14 +68,12 @@ pipeline {
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
                 pip3 install boto3 botocore boto ansible
-                # Path to Ansible directory nested in html/html
                 ansible-playbook $WORKSPACE/html/html/deploy_db_ansible/deploy_db.yml 
                 deactivate
                 '''
             }
         }
 
-        // Groovy Syntax Corrected: withCredentials is inside steps {}
         stage ('Configure DB Instance') {
             steps {
                 withCredentials([
@@ -113,7 +110,6 @@ pipeline {
             }
         }
 
-        // Groovy Syntax Corrected: withCredentials is inside steps {}
         stage ('Log Into ECR and push the newly created Docker') {
             steps {
                 withCredentials([
@@ -138,16 +134,15 @@ pipeline {
 // --- HELPER FUNCTIONS ---
 
 def getSonarPath(){
+    // This function is still needed to put the SonarScanner on the PATH
     def SonarHome= tool name: 'sonarqube', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
     return SonarHome
 }
 
-def getDockerPath(){
-    def DockerHome= tool name: 'docker-inst', type: 'dockerTool'
-    return DockerHome
-}
-
 def getJava11Path() {
+    // This function is needed for the JAVA_HOME export fix
     def java11Home = tool name: 'java11', type: 'hudson.model.JDK'
     return java11Home
 }
+
+// DELETED: def getDockerPath() IS REMOVED
