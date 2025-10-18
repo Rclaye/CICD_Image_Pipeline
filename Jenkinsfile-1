@@ -22,7 +22,6 @@ pipeline {
                         
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=CliXX-App-RC \
-                        -Dsonar.sources=./html \n \
                         -Dsonar.login=${SONAR_TOKEN}
                         """
                         // FIX: Changed -Dsonar.sources from ./html/html to the correct ./html
