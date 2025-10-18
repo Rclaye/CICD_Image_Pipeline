@@ -14,9 +14,9 @@ pipeline {
         stage ('Sonarcube Scan') {
             steps {
                 script {
-                    // 1. Get the tool paths using the helper functions
+                    // 1. Get the tool paths
                     scannerHome = getSonarPath()
-                    java11Home = getJava11Path() // <--- NEW: Get the Java 11 home path
+                    java11Home = getJava11Path() // <-- Get the Java 11 home path
                 }
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]){
                     withSonarQubeEnv('SonarQubeScanner') { 
@@ -30,7 +30,7 @@ pipeline {
                         -Dsonar.login=${SONAR_TOKEN}
                         """
                         // Project Key: CliXX-App-RC
-                        // Source Path: ./html/html
+                        // Source Path: ./html/html (Correct path to the nested application code)
                     }
                 }
             }
@@ -44,7 +44,7 @@ pipeline {
             }
         }
 
-        // --- NEW CICD STAGES (Will appear on Stage View after scan passes) ---
+        // --- NEW CICD STAGES ---
         
         stage ('Build Docker Image') {
             steps {
@@ -70,7 +70,6 @@ pipeline {
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
                 pip3 install boto3 botocore boto ansible
-                # Path to Ansible directory nested in html/html
                 ansible-playbook $WORKSPACE/html/html/deploy_db_ansible/deploy_db.yml 
                 deactivate
                 '''
@@ -135,20 +134,16 @@ pipeline {
 // --- HELPER FUNCTIONS ---
 
 def getSonarPath(){
-    // Returns the path to the SonarScanner 4.7.0.2747 installation
     def SonarHome= tool name: 'sonarqube', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
     return SonarHome
 }
 
 def getDockerPath(){
-    // Returns the path to the Docker installation
     def DockerHome= tool name: 'docker-inst', type: 'dockerTool'
     return DockerHome
 }
 
-// NEW HELPER FUNCTION TO GET THE JAVA 11 PATH
 def getJava11Path() {
-    // Returns the path to the JDK installation named 'java11'
     def java11Home = tool name: 'java11', type: 'hudson.model.JDK'
     return java11Home
 }
