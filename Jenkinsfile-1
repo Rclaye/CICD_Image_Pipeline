@@ -14,23 +14,18 @@ pipeline {
         stage ('Sonarcube Scan') {
             steps {
                 script {
-                    // 1. Get the tool paths
                     scannerHome = getSonarPath()
                     java11Home = getJava11Path() // <-- Get the Java 11 home path
                 }
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]){
                     withSonarQubeEnv('SonarQubeScanner') { 
                         sh """ 
-                        # CRITICAL FIX: EXPORT JAVA_HOME to force use of Java 11 for the scanner
                         export JAVA_HOME='${java11Home}'
-                        
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=CliXX-App-RC \
                         -Dsonar.sources=./html/html \n \
                         -Dsonar.login=${SONAR_TOKEN}
                         """
-                        // Project Key: CliXX-App-RC
-                        // Source Path: ./html/html (Correct path to the nested application code)
                     }
                 }
             }
@@ -44,7 +39,7 @@ pipeline {
             }
         }
 
-        // --- NEW CICD STAGES ---
+        // --- DOCKER AND DB STAGES ---
         
         stage ('Build Docker Image') {
             steps {
@@ -76,20 +71,23 @@ pipeline {
             }
         }
 
+        // SYNTAX FIX: withCredentials is now correctly inside steps {}
         stage ('Configure DB Instance') {
-            withCredentials([
-                string(credentialsId: 'DB_USER_NAME', variable: 'DB_USER'),
-                string(credentialsId: 'DB_PASSWORD', variable: 'DB_PASS'),
-                string(credentialsId: 'DB_NAME', variable: 'DB_NAME'),
-            ]){
-                sh '''
-                SERVER_IP=$(curl -s http://checkip.dyndns.org | sed -e 's/.*Current IP Address: //' -e 's/<.*$//')
-                
-                echo "use ${DB_NAME};" >> $WORKSPACE/db.setup
-                echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';">> $WORKSPACE/db.setup
-                
-                mysql -u ${DB_USER} --password=${DB_PASS} -h ${DB_INSTANCE_URL} -D ${DB_NAME} < $WORKSPACE/db.setup
-                '''
+            steps {
+                withCredentials([
+                    string(credentialsId: 'DB_USER_NAME', variable: 'DB_USER'),
+                    string(credentialsId: 'DB_PASSWORD', variable: 'DB_PASS'),
+                    string(credentialsId: 'DB_NAME', variable: 'DB_NAME'),
+                ]){
+                    sh '''
+                    SERVER_IP=$(curl -s http://checkip.dyndns.org | sed -e 's/.*Current IP Address: //' -e 's/<.*$//')
+                    
+                    echo "use ${DB_NAME};" >> $WORKSPACE/db.setup
+                    echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';">> $WORKSPACE/db.setup
+                    
+                    mysql -u ${DB_USER} --password=${DB_PASS} -h ${DB_INSTANCE_URL} -D ${DB_NAME} < $WORKSPACE/db.setup
+                    '''
+                }
             }
         }
 
@@ -110,12 +108,13 @@ pipeline {
             }
         }
 
+        // SYNTAX FIX: withCredentials is now correctly inside steps {}
         stage ('Log Into ECR and push the newly created Docker') {
-            withCredentials([
-                string(credentialsId: 'ECR_USERNAME', variable: 'ECR_USERNAME'), 
-                string(credentialsId: 'ECR_REPO', variable: 'ECR_REPO_URI'),     
-            ]){
-                steps {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'ECR_USERNAME', variable: 'ECR_USERNAME'), 
+                    string(credentialsId: 'ECR_REPO', variable: 'ECR_REPO_URI'),     
+                ]){
                     script {
                         input(id: 'confirm_push', message: 'Push Image To ECR?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Push to ECR?', name: 'confirm'] ])
                     }
