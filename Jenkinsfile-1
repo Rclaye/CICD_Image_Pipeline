@@ -1,29 +1,29 @@
 pipeline {
     agent any
 
+    // Use the tools directive to automatically install tools.
+    // This creates the "Declarative: Tool Install" stage in Blue Ocean.
+    tools {
+        sonarqube 'sonarqube'       // Name from Global Tool Configuration
+        docker 'docker-inst'        // Name of your Docker installation
+    }
+
     environment {
         VERSION = "1.0.${BUILD_NUMBER}"
-        // ADDED getDockerPath() to the PATH variable
-        PATH = "${PATH}:${getSonarPath()}:${getDockerPath()}" [cite: 428]
-        // Define DB Credentials as environment variables (will be replaced with withCredentials later for security)
-        // For initial testing, the hardcoded values used in the doc are:
-        // DB_USER = 'wordpressuser' // [cite: 648]
-        // DB_PASS = 'W3lcome123'    // [cite: 649]
-        // DB_NAME = 'wordpressdb'   // [cite: 650]
-        // DB_INSTANCE = 'wordpressdbclixxjenkins.cd7numzl1xfe.us-east-1.rds.amazonaws.com' // [cite: 652]
+        // NOTE: The PATH variable and helper functions are removed/commented out 
+        // because the 'tools' directive handles it better for the desired stage view.
     }
 
     stages {
-        // ... (Existing Sonarcube Scan and Quality Gate Stages) ...
+        // --- STAGES FROM YOUR CLASSMATE'S EXAMPLE ---
+
         stage ('Sonarcube Scan') {
             steps {
-                script {
-                    scannerHome = tool 'sonarqube'
-                }
-                // use the withCredentials() Jenkins function to introduce the SONAR_TOKEN secret 
+                // The Sonar Scanner is now available in PATH, no need for tool 'sonarqube' in a script block.
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]){
                     withSonarQubeEnv('SonarQubeScanner') {
-                        sh " ${scannerHome}/bin/sonar-scanner \
+                        // The 'sonar-scanner' command works directly because 'tools' set the PATH
+                        sh " sonar-scanner \
                         -Dsonar.projectKey=CliXX-App-RC-loca \
                         -Dsonar.login=${SONAR_TOKEN} "
                     }
@@ -38,23 +38,19 @@ pipeline {
                 }
             }
         }
-        // ... (End of Existing Stages) ...
 
-        // NEW STAGES START HERE
-// -----------------------------------------------------------------------------------------------------------------
+        // --- NEW CICD STAGES ---
 
         stage ('Build Docker Image') {
             steps {
-                // The documentation uses a simple 'docker build' command, assuming 'docker' is in PATH
-                // and the Dockerfile is in the workspace root.
-                sh "docker build . -t clixx-image:$VERSION " [cite: 458]
+                sh "docker build . -t clixx-image:$VERSION "
             }
         }
 
         stage ('Starting Docker Image') {
             steps {
                 sh '''
-                if ( docker ps | grep clixx-cont ) then
+                if ( docker ps|grep clixx-cont ) then
                     echo "Docker image exists, killing it"
                     docker stop clixx-cont
                     docker rm clixx-cont
@@ -62,95 +58,92 @@ pipeline {
                 else
                     docker run --name clixx-cont -p 80:80 -d clixx-image:$VERSION
                 fi
-                ''' [cite: 463, 472]
+                '''
             }
         }
 
         stage ('Restore CliXX Database') {
             steps {
                 sh '''
+                # Execute Ansible Playbook to restore the RDS instance
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
-                python3 --version
-                pip3 install boto3 botocore boto
+                pip3 install boto3 botocore boto ansible
                 ansible-playbook $WORKSPACE/deploy_db_ansible/deploy_db.yml
                 deactivate
-                ''' [cite: 478, 483, 484]
+                '''
             }
         }
 
         stage ('Configure DB Instance') {
-            // NOTE: This stage requires a manual "Input" step in the original documentation
-            // However, the stage below replaces the input step with a simple sh block for a continuous run.
             steps {
-                sh '''
-                USERNAME='wordpressuser' // Default DB Username [cite: 648]
-                PASSWORD='W3lcome123' // Default DB Password [cite: 649]
-                DBNAME='wordpressdb' // Default DB Name [cite: 650]
-                SERVER_IP=$(curl -s http://checkip.dyndns.org | sed -e 's/.*Current IP Address: //' -e 's/<.*$//') // Gets public IP
-                SERVER_INSTANCE='wordpressdbclixxjenkins.cd7numzl1xfe.us-east-1.rds.amazonaws.com' // DB endpoint [cite: 652]
-                
-                # Create setup file
-                echo "use wordpressdb;" >> $WORKSPACE/db.setup [cite: 653]
-                echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';">> $WORKSPACE/db.setup [cite: 654]
-                
-                # Run DB update
-                mysql -u $USERNAME --password=$PASSWORD -h $SERVER_INSTANCE -D $DBNAME < $WORKSPACE/db.setup [cite: 655]
-                ''' [cite: 647, 656]
+                // IMPORTANT: REPLACE ALL CREDENTIALS IDs WITH YOURS
+                withCredentials([
+                    string(credentialsId: 'DB_USER_NAME_CRED_ID', variable: 'DB_USER'), // e.g., 'wordpressuser'
+                    string(credentialsId: 'DB_PASSWORD_CRED_ID', variable: 'DB_PASS'), // e.g., 'W3lcome123'
+                    string(credentialsId: 'DB_NAME_CRED_ID', variable: 'DB_NAME'),     // e.g., 'wordpressdb'
+                    string(credentialsId: 'DB_INSTANCE_CRED_ID', variable: 'DB_INSTANCE') // e.g., 'wordpressdbclixxjenkins.rds.amazonaws.com'
+                ]){
+                    sh '''
+                    SERVER_IP=$(curl -s http://checkip.dyndns.org | sed -e 's/.*Current IP Address: //' -e 's/<.*$//')
+                    
+                    # Create setup file
+                    echo "use ${DB_NAME};" >> $WORKSPACE/db.setup
+                    echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';">> $WORKSPACE/db.setup
+                    
+                    # Run DB update
+                    mysql -u ${DB_USER} --password=${DB_PASS} -h ${DB_INSTANCE} -D ${DB_NAME} < $WORKSPACE/db.setup
+                    '''
+                }
             }
         }
 
         stage ('Tear Down CliXX Docker Image and Database') {
             steps {
+                // Pause for manual confirmation before deleting resources
                 script {
-                    // Added a manual input here, as seen in the original documentation for tear down [cite: 661, 663]
-                    def userInput = input(id: 'confirm', message: 'Tear Down Environment?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Tear Down Environment?', name: 'confirm'] ])
+                    input(id: 'confirm_teardown', message: 'Tear Down Environment?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Proceed with deletion?', name: 'confirm'] ])
                 }
                 sh '''
+                # Delete RDS instance using Ansible playbook
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
-                python3 --version
-                pip3 install boto3 botocore boto
+                pip3 install boto3 botocore boto ansible
                 ansible-playbook $WORKSPACE/deploy_db_ansible/delete_db.yml
                 deactivate
+                
+                # Stop and remove local Docker container
                 docker stop clixx-cont
                 docker rm clixx-cont
-                ''' [cite: 665, 673]
+                '''
             }
         }
 
         stage ('Log Into ECR and push the newly created Docker') {
             steps {
+                // Pause for manual confirmation before pushing to ECR
                 script {
-                    // Added a manual input here, as seen in the original documentation for push [cite: 678, 680]
-                    def userInput = input(id: 'confirm', message: 'Push Image To ECR?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Push to ECR?', name: 'confirm'] ])
+                    input(id: 'confirm_push', message: 'Push Image To ECR?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Push to ECR?', name: 'confirm'] ])
                 }
-                sh '''
-                # NOTE: You MUST replace xxxxxxxxxxxx with your AWS Account ID and repository URI.
-                # The documentation also shows using environment variables and withCredentials() for secrets (Recommended)
-                aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin xxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/clixx-repository
-                docker tag clixx-image:$VERSION xxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/clixx-repository:clixx-image-$VERSION
-                docker tag clixx-image:$VERSION xxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/clixx-repository:latest
-                docker push xxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/clixx-repository:clixx-image-$VERSION
-                docker push xxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/clixx-repository:latest
-                ''' [cite: 681, 686]
+                // IMPORTANT: REPLACE ECR CREDENTIALS IDs WITH YOURS
+                withCredentials([
+                    string(credentialsId: 'ECR_USERNAME_CRED_ID', variable: 'ECR_USERNAME'), // typically 'AWS'
+                    string(credentialsId: 'ECR_REPO_CRED_ID', variable: 'ECR_REPO_URI'),     // e.g., 'xxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/clixx-repository'
+                ]){
+                    sh '''
+                    # ECR Login
+                    aws ecr get-login-password --region us-east-1 | docker login --username ${ECR_USERNAME} --password-stdin ${ECR_REPO_URI}
+                    
+                    # Tag and Push
+                    docker tag clixx-image:$VERSION ${ECR_REPO_URI}:clixx-image-$VERSION
+                    docker tag clixx-image:$VERSION ${ECR_REPO_URI}:latest
+                    docker push ${ECR_REPO_URI}:clixx-image-$VERSION
+                    docker push ${ECR_REPO_URI}:latest
+                    '''
+                }
             }
         }
-
-    } // End of stages
-} // End of pipeline
-
-// UPDATED HELPER FUNCTIONS
-// -----------------------------------------------------------------------------------------------------------------
-
-// define a function that references the SonarQube tool installation
-def getSonarPath(){
-    def SonarHome= tool name: 'sonarqube', type: 'hudson.plugins.sonar.SonarRunnerInstallation' [cite: 507]
-    return SonarHome
-}
-
-// NEW FUNCTION: define a function that references the Docker tool installation
-def getDockerPath(){
-    def DockerHome= tool name: 'docker-inst', type: 'dockerTool' [cite: 511]
-    return DockerHome
+        
+        // The "Declarative: Post Actions" stage is added automatically by Jenkins
+    }
 }
