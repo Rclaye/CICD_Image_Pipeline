@@ -3,46 +3,50 @@ pipeline {
 
     environment {
         VERSION = "1.0.${BUILD_NUMBER}"
+        // FIXED: Removed the getDockerPath() call. Rely only on getSonarPath() and agent's PATH.
         PATH = "${PATH}:${getSonarPath()}"
+        // RDS Endpoint
         DB_INSTANCE_URL = 'wordpressdbclixxjenkins.cd7numzl1xfe.us-east-1.rds.amazonaws.com' 
     }
 
     stages {
-        // --- SONARQUBE STAGES (FINAL PATH FIX) ---
+        // --- SONARQUBE STAGES (Includes all fixes) ---
         stage ('Sonarcube Scan') {
             steps {
                 script {
                     scannerHome = getSonarPath()
-                    java11Home = getJava11Path()
+                    java11Home = getJava11Path() 
                 }
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]){
                     withSonarQubeEnv('SonarQubeScanner') { 
                         sh """ 
+                        # CRITICAL FIX: EXPORT JAVA_HOME to force use of Java 11
                         export JAVA_HOME='${java11Home}'
                         
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=CliXX-App-RC \
+                        -Dsonar.exclusions=./html/wordpress/wp-admin/**,./html/wordpress/wp-includes/**,./html/wordpress/wp-content/themes/**,./html/wordpress/wp-content/plugins/** \n \
                         -Dsonar.login=${SONAR_TOKEN}
                         """
-                        // FIX: Changed -Dsonar.sources from ./html/html to the correct ./html
+                        // Source Path fixed to './html' AND added exclusions to speed up scan.
                     }
                 }
             }
         }
 
+        // --- QUALITY GATE (Timeout Increased) ---
         stage('Quality Gate') {
             steps {
-                timeout(time: 3, unit: 'MINUTES') {
+                timeout(time: 10, unit: 'MINUTES') { // <-- Increased timeout to account for Sonar processing
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        // --- DOCKER AND DB STAGES (FINAL PATH FIXES) ---
+        // --- DOCKER AND DB STAGES (Will run now that Sonar Scan succeeds) ---
         
         stage ('Build Docker Image') {
             steps {
-                // FIX: Changed docker build context to ./html
                 sh "docker build ./html -t clixx-image:$VERSION " 
             }
         }
@@ -65,7 +69,6 @@ pipeline {
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
                 pip3 install boto3 botocore boto ansible
-                // FIX: Changed Ansible path to $WORKSPACE/html/deploy_db_ansible
                 ansible-playbook $WORKSPACE/html/deploy_db_ansible/deploy_db.yml 
                 deactivate
                 '''
@@ -94,13 +97,12 @@ pipeline {
         stage ('Tear Down CliXX Docker Image and Database') {
             steps {
                 script {
-                    input(id: 'confirm_teardown', message: 'Tear Down Environment?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Proceed with deletion?', name: 'confirm'] ])
+                    input(id: 'confirm_teardown', message: 'Tear Down Environment?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Tear Down Environment?', name: 'confirm'] ])
                 }
                 sh '''
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
                 pip3 install boto3 botocore boto ansible
-                // FIX: Changed Ansible path to $WORKSPACE/html/deploy_db_ansible
                 ansible-playbook $WORKSPACE/html/deploy_db_ansible/delete_db.yml
                 deactivate
                 docker stop clixx-cont
