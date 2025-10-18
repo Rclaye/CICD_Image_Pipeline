@@ -10,7 +10,7 @@ pipeline {
     }
 
     stages {
-        // --- SONARQUBE STAGES (FIXED WITH EXPLICIT JAVA_HOME EXPORT) ---
+        // --- SONARQUBE STAGES (Java Crash Fix) ---
         stage ('Sonarcube Scan') {
             steps {
                 script {
@@ -20,12 +20,16 @@ pipeline {
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]){
                     withSonarQubeEnv('SonarQubeScanner') { 
                         sh """ 
+                        # CRITICAL FIX: EXPORT JAVA_HOME to force use of Java 11 for the scanner
                         export JAVA_HOME='${java11Home}'
+                        
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=CliXX-App-RC \
                         -Dsonar.sources=./html/html \n \
                         -Dsonar.login=${SONAR_TOKEN}
                         """
+                        // Project Key: CliXX-App-RC
+                        // Source Path: ./html/html (Nested structure fix)
                     }
                 }
             }
@@ -39,7 +43,7 @@ pipeline {
             }
         }
 
-        // --- DOCKER AND DB STAGES ---
+        // --- DOCKER AND DB STAGES (Syntax Corrected) ---
         
         stage ('Build Docker Image') {
             steps {
@@ -65,13 +69,14 @@ pipeline {
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
                 pip3 install boto3 botocore boto ansible
+                # Path to Ansible directory nested in html/html
                 ansible-playbook $WORKSPACE/html/html/deploy_db_ansible/deploy_db.yml 
                 deactivate
                 '''
             }
         }
 
-        // SYNTAX FIX: withCredentials is now correctly inside steps {}
+        // Groovy Syntax Corrected: withCredentials is inside steps {}
         stage ('Configure DB Instance') {
             steps {
                 withCredentials([
@@ -108,7 +113,7 @@ pipeline {
             }
         }
 
-        // SYNTAX FIX: withCredentials is now correctly inside steps {}
+        // Groovy Syntax Corrected: withCredentials is inside steps {}
         stage ('Log Into ECR and push the newly created Docker') {
             steps {
                 withCredentials([
