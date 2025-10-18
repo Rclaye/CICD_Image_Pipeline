@@ -1,10 +1,9 @@
 # Dockerfile
+# Use the official PHP image with Apache pre-installed as the base
 FROM php:7.4-apache
 
-# Use the official PHP image with Apache pre-installed as the base
-
 # Set the author/maintainer label
-LABEL maintainer="CliXX Development Team"
+LABEL maintainer="Rclaye Clixx Development"
 
 # Install necessary dependencies, including a database driver (mysqli)
 # and utilities often needed by WordPress and similar apps

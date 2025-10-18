@@ -3,21 +3,27 @@ pipeline {
 
     environment {
         VERSION = "1.0.${BUILD_NUMBER}"
-        PATH = "${PATH}:${getSonarPath()}"
+        // Set PATH using helper functions for the Classic Stage View
+        PATH = "${PATH}:${getSonarPath()}:${getDockerPath()}"
+        // RDS Endpoint (ensure this is correct and accessible from Jenkins agent)
+        DB_INSTANCE_URL = 'wordpressdbclixxjenkins.cd7numzl1xfe.us-east-1.rds.amazonaws.com' 
     }
 
     stages {
+        // --- SONARQUBE STAGES ---
         stage ('Sonarcube Scan') {
             steps {
                 script {
-                    scannerHome = tool 'sonarqube'
+                    // Force re-read of tool path
+                    scannerHome = tool 'sonarqube' 
                 }
-                // use the withCredentials() Jenkins function to introduce the SONAR_TOKEN secret 
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]){
-                    withSonarQubeEnv('SonarQubeScanner') {
+                    withSonarQubeEnv('SonarQubeScanner') { 
                         sh " ${scannerHome}/bin/sonar-scanner \
-                        -Dsonar.projectKey=CliXX-App-RC   \
+                        -Dsonar.projectKey=CliXX-App-RC \
+                        -Dsonar.sources=./html/html \n \
                         -Dsonar.login=${SONAR_TOKEN} "
+                        // CRITICAL: Updated project key and path to code folder.
                     }
                 }
             }
@@ -30,11 +36,104 @@ pipeline {
                 }
             }
         }
-    }
+
+        // --- DOCKER AND DB STAGES (Will be visible after the scan passes) ---
+
+        stage ('Build Docker Image') {
+            steps {
+                // Building from the Dockerfile located in the 'html/html' directory
+                sh "docker build ./html/html -t clixx-image:$VERSION " 
+            }
+        }
+
+        stage ('Starting Docker Image') {
+            steps {
+                sh '''
+                if ( docker ps|grep clixx-cont ) then
+                    docker stop clixx-cont
+                    docker rm clixx-cont
+                fi
+                docker run --name clixx-cont -p 80:80 -d clixx-image:$VERSION
+                '''
+            }
+        }
+
+        stage ('Restore CliXX Database') {
+            steps {
+                sh '''
+                python3 -m venv python3-virtualenv
+                source python3-virtualenv/bin/activate
+                pip3 install boto3 botocore boto ansible
+                # Path to Ansible directory nested in html/html
+                ansible-playbook $WORKSPACE/html/html/deploy_db_ansible/deploy_db.yml 
+                deactivate
+                '''
+            }
+        }
+
+        stage ('Configure DB Instance') {
+            // Note: Use the credentials from your Jenkins store
+            withCredentials([
+                string(credentialsId: 'DB_USER_NAME', variable: 'DB_USER'),
+                string(credentialsId: 'DB_PASSWORD', variable: 'DB_PASS'),
+                string(credentialsId: 'DB_NAME', variable: 'DB_NAME'),
+            ]){
+                sh '''
+                SERVER_IP=$(curl -s http://checkip.dyndns.org | sed -e 's/.*Current IP Address: //' -e 's/<.*$//')
+                
+                echo "use ${DB_NAME};" >> $WORKSPACE/db.setup
+                echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';">> $WORKSPACE/db.setup
+                
+                mysql -u ${DB_USER} --password=${DB_PASS} -h ${DB_INSTANCE_URL} -D ${DB_NAME} < $WORKSPACE/db.setup
+                '''
+            }
+        }
+
+        stage ('Tear Down CliXX Docker Image and Database') {
+            steps {
+                script {
+                    input(id: 'confirm_teardown', message: 'Tear Down Environment?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Proceed with deletion?', name: 'confirm'] ])
+                }
+                sh '''
+                python3 -m venv python3-virtualenv
+                source python3-virtualenv/bin/activate
+                pip3 install boto3 botocore boto ansible
+                ansible-playbook $WORKSPACE/html/html/deploy_db_ansible/delete_db.yml
+                deactivate
+                docker stop clixx-cont
+                docker rm clixx-cont
+                '''
+            }
+        }
+
+        stage ('Log Into ECR and push the newly created Docker') {
+            withCredentials([
+                string(credentialsId: 'ECR_USERNAME', variable: 'ECR_USERNAME'), 
+                string(credentialsId: 'ECR_REPO', variable: 'ECR_REPO_URI'),     
+            ]){
+                steps {
+                    script {
+                        input(id: 'confirm_push', message: 'Push Image To ECR?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Push to ECR?', name: 'confirm'] ])
+                    }
+                    sh '''
+                    aws ecr get-login-password --region us-east-1 | docker login --username ${ECR_USERNAME} --password-stdin ${ECR_REPO_URI}
+                    docker tag clixx-image:$VERSION ${ECR_REPO_URI}:clixx-image-$VERSION
+                    docker tag clixx-image:$VERSION ${ECR_REPO_URI}:latest
+                    docker push ${ECR_REPO_URI}:clixx-image-$VERSION
+                    '''
+                }
+            }
+        }
+    } 
 }
 
-// define a function that references the SonarQube tool installation
+// Helper functions (required when setting PATH in 'environment' for Classic Stage View)
 def getSonarPath(){
     def SonarHome= tool name: 'sonarqube', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
     return SonarHome
+}
+
+def getDockerPath(){
+    def DockerHome= tool name: 'docker-inst', type: 'dockerTool'
+    return DockerHome
 }
