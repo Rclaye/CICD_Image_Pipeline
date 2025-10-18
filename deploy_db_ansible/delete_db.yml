@@ -1,0 +1,18 @@
+# deploy_db_ansible/delete_db.yml
+---
+- name: Delete RDS Instance
+  hosts: localhost
+  connection: local
+  vars_files:
+    - vars.yml
+  gather_facts: no
+
+  tasks:
+    - name: Ensure the RDS instance is absent (deleted)
+      community.aws.rds_instance:
+        state: absent
+        db_instance_identifier: "{{ db_instance_id }}"
+        region: "{{ db_region }}"
+        skip_final_snapshot: yes  # Skips final snapshot for quicker deletion
+        wait: yes
+        wait_timeout: 600

@@ -1,0 +1,26 @@
+# deploy_db_ansible/deploy_db.yml
+---
+- name: Restore or Ensure RDS Instance from Snapshot
+  hosts: localhost
+  connection: local
+  vars_files:
+    - vars.yml
+  gather_facts: no
+
+  tasks:
+    - name: Ensure RDS instance is present and restored from snapshot
+      community.aws.rds_instance:
+        state: present
+        db_instance_identifier: "{{ db_instance_id }}"
+        engine: "{{ db_engine }}"
+        allocated_storage: "{{ db_allocated_storage }}"
+        db_instance_class: "{{ db_instance_class }}"
+        master_username: "{{ db_master_username }}"
+        master_password: "{{ db_password }}"
+        db_security_groups: "{{ db_security_groups }}"
+        db_subnet_group_name: "{{ db_subnet_group }}"
+        # Restoring from a specific snapshot
+        snapshot_identifier: "{{ db_snapshot_id }}" 
+        region: "{{ db_region }}"
+        wait: yes
+        wait_timeout: 600
