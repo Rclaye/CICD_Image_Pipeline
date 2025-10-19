@@ -3,14 +3,13 @@ pipeline {
 
     environment {
         VERSION = "1.0.${BUILD_NUMBER}"
-        // FIXED: Removed the getDockerPath() call. Rely only on getSonarPath() and agent's PATH.
         PATH = "${PATH}:${getSonarPath()}"
         // RDS Endpoint
         DB_INSTANCE_URL = 'wordpressdbclixxjenkins.cd7numzl1xfe.us-east-1.rds.amazonaws.com' 
     }
 
     stages {
-        // --- SONARQUBE STAGES (Includes all fixes) ---
+        // --- SONARQUBE STAGES ---
         stage ('Sonarcube Scan') {
             steps {
                 script {
@@ -25,29 +24,28 @@ pipeline {
                         
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=CliXX-App-RC \
-                        -Dsonar.exclusions=./html/wordpress/wp-admin/**,./html/wordpress/wp-includes/**,./html/wordpress/wp-content/themes/**,./html/wordpress/wp-content/plugins/** \n \
+                        -Dsonar.sources=. \
+                        -Dsonar.exclusions=**/wp-admin/**,**/wp-includes/**,**/wp-content/themes/**,**/wp-content/plugins/** \
                         -Dsonar.login=${SONAR_TOKEN}
                         """
-                        // Source Path fixed to './html' AND added exclusions to speed up scan.
                     }
                 }
             }
         }
 
-        // --- QUALITY GATE (Timeout Increased) ---
+        // --- QUALITY GATE ---
         stage('Quality Gate') {
             steps {
-                timeout(time: 10, unit: 'MINUTES') { // <-- Increased timeout to account for Sonar processing
+                timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        // --- DOCKER AND DB STAGES (Will run now that Sonar Scan succeeds) ---
-        
+        // --- DOCKER STAGES ---
         stage ('Build Docker Image') {
             steps {
-                sh "docker build ./html -t clixx-image:$VERSION " 
+                sh "docker build . -t clixx-image:$VERSION " 
             }
         }
 
@@ -69,7 +67,7 @@ pipeline {
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
                 pip3 install boto3 botocore boto ansible
-                ansible-playbook $WORKSPACE/html/deploy_db_ansible/deploy_db.yml 
+                ansible-playbook $WORKSPACE/deploy_db_ansible/deploy_db.yml 
                 deactivate
                 '''
             }
@@ -103,7 +101,7 @@ pipeline {
                 python3 -m venv python3-virtualenv
                 source python3-virtualenv/bin/activate
                 pip3 install boto3 botocore boto ansible
-                ansible-playbook $WORKSPACE/html/deploy_db_ansible/delete_db.yml
+                ansible-playbook $WORKSPACE/deploy_db_ansible/delete_db.yml
                 deactivate
                 docker stop clixx-cont
                 docker rm clixx-cont
