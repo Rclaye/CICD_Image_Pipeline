@@ -4,7 +4,6 @@ pipeline {
     environment {
         VERSION = "1.0.${BUILD_NUMBER}"
         PATH = "${PATH}:${getSonarPath()}"
-        // RDS Endpoint - UPDATED
         DB_INSTANCE_URL = 'wordpressdbclixxjenkins.cy5secw8qpif.us-east-1.rds.amazonaws.com' 
     }
 

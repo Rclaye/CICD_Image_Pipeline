@@ -1,5 +1,5 @@
 ---
-- name: Restore or Ensure RDS Instance from Snapshot
+- name: Restore2 or Ensure RDS Instance from Snapshot
   hosts: localhost
   connection: local
   gather_facts: no

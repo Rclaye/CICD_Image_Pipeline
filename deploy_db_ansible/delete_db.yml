@@ -1,5 +1,5 @@
 ---
-- name: Delete RDS Instance
+- name: Delete2 RDS Instance
   hosts: localhost
   connection: local
   gather_facts: no
