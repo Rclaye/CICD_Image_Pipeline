@@ -4,8 +4,8 @@ pipeline {
     environment {
         VERSION = "1.0.${BUILD_NUMBER}"
         PATH = "${PATH}:${getSonarPath()}"
-        // RDS Endpoint
-        DB_INSTANCE_URL = 'wordpressdbclixxjenkins.cd7numzl1xfe.us-east-1.rds.amazonaws.com' 
+        // RDS Endpoint - UPDATED
+        DB_INSTANCE_URL = 'wordpressdbclixxjenkins.cy5secw8qpif.us-east-1.rds.amazonaws.com' 
     }
 
     stages {
@@ -83,8 +83,8 @@ pipeline {
                     sh '''
                     SERVER_IP=$(curl -s http://checkip.dyndns.org | sed -e 's/.*Current IP Address: //' -e 's/<.*$//')
                     
-                    echo "use ${DB_NAME};" >> $WORKSPACE/db.setup
-                    echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';">> $WORKSPACE/db.setup
+                    echo "use ${DB_NAME};" > $WORKSPACE/db.setup
+                    echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';" >> $WORKSPACE/db.setup
                     
                     mysql -u ${DB_USER} --password=${DB_PASS} -h ${DB_INSTANCE_URL} -D ${DB_NAME} < $WORKSPACE/db.setup
                     '''
@@ -127,7 +127,44 @@ pipeline {
                 }
             }
         }
-    } 
+    }
+    
+    // --- POST ACTIONS ---
+    post {
+        failure {
+            echo '========== PIPELINE FAILED - CLEANING UP RESOURCES =========='
+            script {
+                // Clean up Docker container
+                sh '''
+                if docker ps -a | grep clixx-cont; then
+                    echo "Stopping and removing Docker container..."
+                    docker stop clixx-cont || true
+                    docker rm clixx-cont || true
+                fi
+                '''
+                
+                // Clean up RDS database
+                sh '''
+                echo "Deleting RDS database instance..."
+                python3 -m venv python3-virtualenv
+                source python3-virtualenv/bin/activate
+                pip3 install boto3 botocore boto ansible
+                ansible-playbook $WORKSPACE/deploy_db_ansible/delete_db.yml || echo "Database deletion failed or already deleted"
+                deactivate
+                '''
+            }
+        }
+        
+        success {
+            echo '========== PIPELINE COMPLETED SUCCESSFULLY =========='
+        }
+        
+        always {
+            echo '========== PIPELINE FINISHED =========='
+            // Clean up workspace if needed
+            // cleanWs()
+        }
+    }
 }
 
 // --- HELPER FUNCTIONS ---
