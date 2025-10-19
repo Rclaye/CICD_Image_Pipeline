@@ -1,18 +1,22 @@
-# deploy_db_ansible/delete_db.yml
 ---
 - name: Delete RDS Instance
   hosts: localhost
   connection: local
-  vars_files:
-    - vars.yml
   gather_facts: no
+  vars:
+    db_instance_id: wordpressdbclixxjenkins
+    region: us-east-1
 
   tasks:
-    - name: Ensure the RDS instance is absent (deleted)
+    - name: Delete RDS instance without final snapshot
       community.aws.rds_instance:
+        id: "{{ db_instance_id }}"
         state: absent
-        db_instance_identifier: "{{ db_instance_id }}"
-        region: "{{ db_region }}"
-        skip_final_snapshot: yes  # Skips final snapshot for quicker deletion
-        wait: yes
-        wait_timeout: 600
+        skip_final_snapshot: yes
+        region: "{{ region }}"
+      register: delete_result
+      ignore_errors: yes
+
+    - name: Display deletion result
+      debug:
+        var: delete_result
