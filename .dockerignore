@@ -1,0 +1,11 @@
+# .dockerignore
+python3-virtualenv/
+python3-virtualenv/*
+**/__pycache__/
+*.pyc
+.git/
+.gitignore
+Jenkinsfile-1
+deploy_db_ansible/
+*.md
+.scannerwork/
