@@ -4,13 +4,13 @@
   connection: local
   gather_facts: no
   vars:
-    db_instance_id: wordpressdbclixxjenkins
+    db_instance_identifier: wordpressdbclixxjenkins
     region: us-east-1
 
   tasks:
     - name: Delete RDS instance without final snapshot
       community.aws.rds_instance:
-        id: "{{ db_instance_id }}"
+        db_instance_identifier: "{{ db_instance_identifier }}"
         state: absent
         skip_final_snapshot: yes
         region: "{{ region }}"

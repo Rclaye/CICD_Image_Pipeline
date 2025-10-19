@@ -4,27 +4,28 @@
   connection: local
   gather_facts: no
   vars:
-    db_instance_id: wordpressdbclixxjenkins
-    db_snapshot_id: wordpressdbclixxjenkins-1
+    db_instance_identifier: wordpressdbclixxjenkins
+    db_snapshot_identifier: wordpressdbclixxjenkins-1
+    db_instance_class: db.t2.small
     security_group_id: sg-0dc66b0a42e0697da
-    db_instance_type: db.t2.small
     subnet_group: default
     region: us-east-1
 
   tasks:
     - name: Ensure RDS instance is present and restored from snapshot
       community.aws.rds_instance:
-        id: "{{ db_instance_id }}"
+        db_instance_identifier: "{{ db_instance_identifier }}"
         state: present
-        snapshot_id: "{{ db_snapshot_id }}"
-        instance_type: "{{ db_instance_type }}"
+        db_snapshot_identifier: "{{ db_snapshot_identifier }}"
+        db_instance_class: "{{ db_instance_class }}"
+        engine: mysql
         region: "{{ region }}"
         vpc_security_group_ids:
           - "{{ security_group_id }}"
         db_subnet_group_name: "{{ subnet_group }}"
         publicly_accessible: yes
-        wait: yes
         skip_final_snapshot: yes
+        wait: yes
       register: rds_result
 
     - name: Display RDS instance information
