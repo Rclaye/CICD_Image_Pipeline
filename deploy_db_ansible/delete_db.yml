@@ -6,14 +6,25 @@
   vars:
     db_instance_identifier: wordpressdbclixxjenkins
     region: us-east-1
+    cross_account_role_arn: arn:aws:iam::924305315126:role/Engineer
 
   tasks:
+    - name: Assume cross-account role in Dev account
+      community.aws.sts_assume_role:
+        role_arn: "{{ cross_account_role_arn }}"
+        role_session_name: jenkins-rds-delete
+        region: "{{ region }}"
+      register: assumed_role
+
     - name: Delete RDS instance without final snapshot
       community.aws.rds_instance:
         db_instance_identifier: "{{ db_instance_identifier }}"
         state: absent
         skip_final_snapshot: yes
         region: "{{ region }}"
+        aws_access_key: "{{ assumed_role.sts_creds.access_key }}"
+        aws_secret_key: "{{ assumed_role.sts_creds.secret_key }}"
+        security_token: "{{ assumed_role.sts_creds.session_token }}"
       register: delete_result
       ignore_errors: yes
 

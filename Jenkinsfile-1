@@ -119,10 +119,22 @@ pipeline {
                         input(id: 'confirm_push', message: 'Push Image To ECR?', parameters: [ [$class: 'BooleanParameterDefinition', defaultValue: false, description: 'Push to ECR?', name: 'confirm'] ])
                     }
                     sh '''
+                    # Assume the cross-account role for ECR access
+                    CREDENTIALS=$(aws sts assume-role --role-arn "arn:aws:iam::924305315126:role/Engineer" --role-session-name "jenkins-ecr-push" --region us-east-1)
+                    
+                    # Extract temporary credentials
+                    export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | jq -r .Credentials.AccessKeyId)
+                    export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | jq -r .Credentials.SecretAccessKey)
+                    export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | jq -r .Credentials.SessionToken)
+                    
+                    # Use the assumed role to get ECR login password
                     aws ecr get-login-password --region us-east-1 | docker login --username ${ECR_USERNAME} --password-stdin ${ECR_REPO_URI}
+                    
+                    # Tag and push the Docker image
                     docker tag clixx-image:$VERSION ${ECR_REPO_URI}:clixx-image-$VERSION
                     docker tag clixx-image:$VERSION ${ECR_REPO_URI}:latest
                     docker push ${ECR_REPO_URI}:clixx-image-$VERSION
+                    docker push ${ECR_REPO_URI}:latest
                     '''
                 }
             }
