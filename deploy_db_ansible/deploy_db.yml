@@ -9,8 +9,17 @@
     db_instance_class: db.t2.small
     security_group_id: sg-0dc66b0a42e0697da
     region: us-east-1
+    # Dev account Engineer role
+    cross_account_role_arn: arn:aws:iam::924305315126:role/Engineer
 
   tasks:
+    - name: Assume cross-account role in Dev account
+      amazon.aws.sts_assume_role:
+        role_arn: "{{ cross_account_role_arn }}"
+        role_session_name: jenkins-rds-restore
+        region: "{{ region }}"
+      register: assumed_role
+
     - name: Restore RDS instance from snapshot
       community.aws.rds_instance:
         db_instance_identifier: "{{ db_instance_identifier }}"
@@ -25,6 +34,9 @@
         publicly_accessible: yes
         skip_final_snapshot: yes
         wait: yes
+        aws_access_key: "{{ assumed_role.sts_creds.access_key }}"
+        aws_secret_key: "{{ assumed_role.sts_creds.secret_key }}"
+        security_token: "{{ assumed_role.sts_creds.session_token }}"
       register: rds_result
 
     - name: Display RDS instance information
