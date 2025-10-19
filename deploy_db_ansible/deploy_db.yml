@@ -8,7 +8,6 @@
     db_snapshot_identifier: wordpressdbclixxjenkins-1
     db_instance_class: db.t2.small
     security_group_id: sg-0dc66b0a42e0697da
-    subnet_group: default
     region: us-east-1
 
   tasks:
@@ -22,7 +21,6 @@
         region: "{{ region }}"
         vpc_security_group_ids:
           - "{{ security_group_id }}"
-        db_subnet_group_name: "{{ subnet_group }}"
         publicly_accessible: yes
         skip_final_snapshot: yes
         wait: yes
