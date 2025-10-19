@@ -6,10 +6,9 @@
   vars:
     db_instance_identifier: wordpressdbclixxjenkins
     db_snapshot_identifier: wordpressdbclixxjenkins-1
-    db_instance_class: db.t2.small
+    db_instance_class: db.t3.small  # ← CHANGED from db.t2.small
     security_group_id: sg-0dc66b0a42e0697da
     region: us-east-1
-    # Dev account Engineer role
     cross_account_role_arn: arn:aws:iam::924305315126:role/Engineer
 
   tasks:
