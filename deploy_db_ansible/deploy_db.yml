@@ -14,7 +14,7 @@
 
   tasks:
     - name: Assume cross-account role in Dev account
-      amazon.aws.sts_assume_role:
+      community.aws.sts_assume_role:
         role_arn: "{{ cross_account_role_arn }}"
         role_session_name: jenkins-rds-restore
         region: "{{ region }}"
