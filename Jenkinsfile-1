@@ -80,10 +80,11 @@ pipeline {
                     string(credentialsId: 'DB_NAME', variable: 'DB_NAME'),
                 ]){
                     sh '''
-                    SERVER_IP=$(curl -s http://checkip.dyndns.org | sed -e 's/.*Current IP Address: //' -e 's/<.*$//')
+                    # FIXED: Use NLB DNS instead of server IP
+                    NLB_DNS="clixx-nlb-e46559fca19783b1.elb.us-east-1.amazonaws.com"
                     
                     echo "use ${DB_NAME};" > $WORKSPACE/db.setup
-                    echo "UPDATE wp_options SET option_value = '$SERVER_IP' WHERE option_value LIKE 'http%';" >> $WORKSPACE/db.setup
+                    echo "UPDATE wp_options SET option_value = 'http://${NLB_DNS}' WHERE option_name IN ('siteurl', 'home');" >> $WORKSPACE/db.setup
                     
                     mysql -u ${DB_USER} --password=${DB_PASS} -h ${DB_INSTANCE_URL} -D ${DB_NAME} < $WORKSPACE/db.setup
                     '''
