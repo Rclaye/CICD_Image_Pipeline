@@ -17,6 +17,8 @@ RUN apt-get update && \
     vim \
     mariadb-client && \
     docker-php-ext-install mysqli pdo pdo_mysql gd zip && \
+    # Fix Apache ServerName warning
+    echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
