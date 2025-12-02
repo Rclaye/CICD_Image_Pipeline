@@ -81,10 +81,18 @@ pipeline {
                 ]){
                     sh '''
                     # FIXED: Use Route 53 hosted zone record (always the same)
-                    SITE_URL="ecs.stack-claye.com"
+                    SITE_URL="http://ecs.stack-claye.com"
                     
                     echo "use ${DB_NAME};" > $WORKSPACE/db.setup
-                    echo "UPDATE wp_options SET option_value = 'http://${SITE_URL}' WHERE option_name IN ('siteurl', 'home');" >> $WORKSPACE/db.setup
+                    
+                    # PRIMARY: Your working query - update option_value where it contains ELB
+                    echo "UPDATE wp_options SET option_value = '${SITE_URL}' WHERE option_value LIKE '%ELB%';" >> $WORKSPACE/db.setup
+                    
+                    # BACKUP: Also update by option_name in case ELB pattern doesn't match
+                    echo "UPDATE wp_options SET option_value = '${SITE_URL}' WHERE option_name IN ('siteurl', 'home');" >> $WORKSPACE/db.setup
+                    
+                    # Show results
+                    echo "SELECT option_name, option_value FROM wp_options WHERE option_name IN ('siteurl', 'home');" >> $WORKSPACE/db.setup
                     
                     mysql -u ${DB_USER} --password=${DB_PASS} -h ${DB_INSTANCE_URL} -D ${DB_NAME} < $WORKSPACE/db.setup
                     '''
