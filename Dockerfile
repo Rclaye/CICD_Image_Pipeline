@@ -23,10 +23,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy your application source code into the webroot directory
-# The application files (index.php, wp-config.php, etc.) are in the 
-# same directory as this Dockerfile, which is the './html' context from Jenkins.
-# The webroot for the Apache image is /var/www/html/
 COPY . /var/www/html/
+
+# Copy and set permissions for the entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Update ownership of the web root to the Apache user
 RUN chown -R www-data:www-data /var/www/html/
@@ -34,4 +35,5 @@ RUN chown -R www-data:www-data /var/www/html/
 # Expose port 80 (standard HTTP)
 EXPOSE 80
 
-# The default command for the base image runs Apache, so we do not need a CMD instruction.
+# Use our custom entrypoint script
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
